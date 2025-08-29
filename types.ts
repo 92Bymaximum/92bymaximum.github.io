@@ -1,0 +1,10 @@
+
+export enum LoadingStatus {
+  IDLE = 'IDLE',
+  UPLOADING = 'UPLOADING',
+  INITIALIZING = 'INITIALIZING',
+  GENERATING = 'GENERATING',
+  POLLING = 'POLLING',
+  DONE = 'DONE',
+  ERROR = 'ERROR',
+}
