@@ -1,5 +1,4 @@
-
-import React, { useState, useRef, useCallback } from 'react';
+import React, { useState, useRef, useCallback, useEffect } from 'react';
 import { generateVideoFromImage } from '../services/geminiService';
 import { LoadingStatus } from '../types';
 
@@ -18,11 +17,36 @@ const Demo: React.FC = () => {
   const [error, setError] = useState<string | null>(null);
   const [videoUrl, setVideoUrl] = useState<string | null>(null);
   const [uploadedImage, setUploadedImage] = useState<string | null>(null);
+  const [apiKey, setApiKey] = useState<string>('');
+  const [isKeySaved, setIsKeySaved] = useState<boolean>(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
+
+  useEffect(() => {
+    const storedKey = sessionStorage.getItem('gemini-api-key');
+    if (storedKey) {
+      setApiKey(storedKey);
+      setIsKeySaved(true);
+    }
+  }, []);
+
+  const handleSaveKey = () => {
+    if (apiKey.trim()) {
+      sessionStorage.setItem('gemini-api-key', apiKey.trim());
+      setIsKeySaved(true);
+      setError(null);
+    } else {
+        setError("Please enter a valid API Key.");
+    }
+  };
 
   const handleFileChange = async (event: React.ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
     if (!file) return;
+
+    if (!isKeySaved) {
+        setError("Please save your API key before uploading an image.");
+        return;
+    }
 
     if (!file.type.startsWith('image/')) {
         setError('Please upload a valid image file (PNG, JPG, etc.).');
@@ -55,13 +79,18 @@ const Demo: React.FC = () => {
   };
   
   const generateVideo = useCallback(async (base64String: string, mimeType: string) => {
+    const userApiKey = sessionStorage.getItem('gemini-api-key');
+    if (!userApiKey) {
+        throw new Error('API Key not found. Please configure it first.');
+    }
+
     try {
-        const videoUri = await generateVideoFromImage(base64String, mimeType, (newStatus: LoadingStatus) => {
+        const videoUri = await generateVideoFromImage(userApiKey, base64String, mimeType, (newStatus: LoadingStatus) => {
           setStatus(newStatus);
         });
 
         if (videoUri) {
-          const response = await fetch(`${videoUri}&key=${process.env.API_KEY}`);
+          const response = await fetch(`${videoUri}&key=${userApiKey}`);
           if (!response.ok) {
             throw new Error(`Failed to fetch video: ${response.statusText}`);
           }
@@ -72,9 +101,9 @@ const Demo: React.FC = () => {
         } else {
             throw new Error('Video generation did not return a valid URI.');
         }
-    } catch (err) {
+    } catch (err: any) {
         console.error(err);
-        setError('An unexpected error occurred during video generation.');
+        setError(err.message || 'An unexpected error occurred during video generation.');
         setStatus(LoadingStatus.ERROR);
     }
   }, []);
@@ -94,6 +123,28 @@ const Demo: React.FC = () => {
         </div>
         
         <div className="max-w-4xl mx-auto bg-slate-800/60 border border-slate-700 rounded-2xl p-6 md:p-10 shadow-2xl shadow-slate-900/50">
+          {!isKeySaved && (
+            <div className="mb-6 p-4 border border-fuchsia-500/50 bg-fuchsia-500/10 rounded-lg text-center">
+              <h3 className="font-semibold text-fuchsia-300 mb-2">Enter Your Google Gemini API Key</h3>
+              <div className="flex flex-col sm:flex-row gap-2">
+                <input
+                  type="password"
+                  value={apiKey}
+                  onChange={(e) => setApiKey(e.target.value)}
+                  placeholder="Paste your API key here"
+                  className="flex-grow bg-slate-900 border border-slate-600 rounded-md px-3 py-2 text-white placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-fuchsia-500"
+                />
+                <button
+                  onClick={handleSaveKey}
+                  className="px-5 py-2 text-sm font-semibold bg-fuchsia-500 text-white rounded-md hover:bg-fuchsia-600 transition-colors"
+                >
+                  Save Key
+                </button>
+              </div>
+              <p className="text-xs text-slate-500 mt-2">Your key is stored only in your browser session and is never sent to our servers.</p>
+            </div>
+          )}
+
           <div className="aspect-video w-full bg-slate-900 rounded-lg mb-6 flex items-center justify-center overflow-hidden border border-slate-700 relative">
             {videoUrl && status === LoadingStatus.DONE ? (
               <video src={videoUrl} autoPlay loop muted playsInline className="w-full h-full object-contain"></video>
@@ -127,11 +178,12 @@ const Demo: React.FC = () => {
             <input type="file" ref={fileInputRef} onChange={handleFileChange} accept="image/*" className="hidden" />
             <button
               onClick={handleUploadClick}
-              disabled={isLoading}
+              disabled={isLoading || !isKeySaved}
               className="px-8 py-4 text-lg font-bold bg-gradient-to-r from-cyan-400 to-fuchsia-500 text-white rounded-full hover:opacity-90 transition-all duration-300 transform hover:scale-105 disabled:opacity-50 disabled:cursor-not-allowed disabled:scale-100 shadow-[0_0_20px_theme(colors.cyan.500/50%)]"
             >
               {isLoading ? 'Processing...' : (videoUrl ? 'Upload Another Image' : 'Upload Image')}
             </button>
+            {!isKeySaved && <p className="text-sm text-fuchsia-400 mt-3">Please save your API key to enable upload.</p>}
           </div>
         </div>
       </div>

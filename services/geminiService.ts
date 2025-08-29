@@ -1,24 +1,37 @@
-
 import { GoogleGenAI } from "@google/genai";
 import { LoadingStatus } from '../types';
-import type { VideosOperationResponse } from "@google/genai";
 
-if (!process.env.API_KEY) {
-  throw new Error("API_KEY environment variable is not set");
-}
+// Store AI client instances keyed by API key to avoid re-initialization
+const aiClients: Map<string, GoogleGenAI> = new Map();
 
-const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
+const getAiClient = (apiKey: string): GoogleGenAI => {
+  if (aiClients.has(apiKey)) {
+    return aiClients.get(apiKey)!;
+  }
+  
+  if (!apiKey) {
+    throw new Error("API_KEY must be provided to initialize the AI client.");
+  }
+
+  const newAiClient = new GoogleGenAI({ apiKey });
+  aiClients.set(apiKey, newAiClient);
+  return newAiClient;
+};
+
 
 const wait = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
 
 export const generateVideoFromImage = async (
+  apiKey: string,
   base64ImageData: string,
   mimeType: string,
   onStatusChange: (status: LoadingStatus) => void
 ): Promise<string | null> => {
   onStatusChange(LoadingStatus.INITIALIZING);
+  
+  const aiClient = getAiClient(apiKey);
 
-  let operation: VideosOperationResponse = await ai.models.generateVideos({
+  let operation = await aiClient.models.generateVideos({
     model: 'veo-2.0-generate-001',
     prompt: 'Animate this image into a short, looping holographic volumetric video. The object should rotate slowly, with glowing edges and digital particle effects. Give it a futuristic, sci-fi feel.',
     image: {
@@ -40,7 +53,7 @@ export const generateVideoFromImage = async (
     await wait(10000); // Wait 10 seconds between polls
     
     try {
-        operation = await ai.operations.getVideosOperation({ operation: operation });
+        operation = await aiClient.operations.getVideosOperation({ operation: operation });
     } catch(e) {
         console.error("Polling failed", e);
         // Continue to retry polling
